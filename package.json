@@ -1,0 +1,50 @@
+{
+  "name": "book-mgr",
+  "version": "1.0.0",
+  "author": "sw",
+  "buildDate": "2026-08-11",
+  "description": "本地文档管理应用",
+  "main": "main.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "electron": "electron .",
+    "dist": "cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ electron-builder"
+  },
+  "build": {
+    "appId": "com.example.book-mgr",
+    "productName": "文档管理器",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "settings.html",
+      "server.js",
+      "public/**/*",
+      "node_modules/**/*",
+      "tools/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": true
+    }
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "marked": "^12.0.0",
+    "pdfjs-dist": "^4.5.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3"
+  }
+}

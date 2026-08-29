@@ -1,0 +1,126 @@
+/* code {
+    font-family: source-code-pro, consolas, monospace, -apple-system, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo;
+    background: #f6f8fa;*/ /*#F5F5F5*/
+    /* padding: 2px 6px; */
+    /*border-radius: 4px;
+    color: #e96900;
+    font-size: 0.9em;
+}
+pre {
+    position: relative;
+    background: #f6f8fa;*/ /*#F5F5F5*/
+    /*color: #000;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 1em 0;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border: 1px;
+    border-color: #eee;*/ /*#CCCCCC*/
+/*}
+pre code {
+    background: none;
+    padding: 0px;
+    color: inherit;
+} */
+
+/**############################*/
+pre code.hljs {
+    display: block;
+    overflow-x: auto;
+    padding: 1em
+}
+
+code.hljs {
+    padding: 3px 5px
+}
+
+.hljs {
+    color: #2a2c2d;
+    background: #e6e6e6
+}
+
+.hljs-emphasis {
+    font-style: italic
+}
+
+.hljs-strong {
+    font-weight: 700
+}
+
+.hljs-link {
+    text-decoration: underline
+}
+
+.hljs-comment,
+.hljs-quote {
+    color: #676b79;
+    font-style: italic
+}
+
+.hljs-params {
+    color: #676b79
+}
+
+.hljs-attr,
+.hljs-punctuation {
+    color: #2a2c2d
+}
+
+.hljs-char.escape_,
+.hljs-meta,
+.hljs-name,
+.hljs-operator,
+.hljs-selector-tag {
+    color: #c56200
+}
+
+.hljs-deletion,
+.hljs-keyword {
+    color: #d92792
+}
+
+.hljs-regexp,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-variable.language_ {
+    color: #cc5e91
+}
+
+.hljs-code,
+.hljs-formula,
+.hljs-property,
+.hljs-section,
+.hljs-subst,
+.hljs-title.function_ {
+    color: #3787c7
+}
+
+.hljs-addition,
+.hljs-bullet,
+.hljs-meta .hljs-string,
+.hljs-selector-class,
+.hljs-string,
+.hljs-symbol,
+.hljs-title.class_,
+.hljs-title.class_.inherited__ {
+    color: #0d7d6c
+}
+
+.hljs-attribute,
+.hljs-built_in,
+.hljs-doctag,
+.hljs-link,
+.hljs-literal,
+.hljs-meta .hljs-keyword,
+.hljs-number,
+.hljs-selector-id,
+.hljs-tag,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-title,
+.hljs-type,
+.hljs-variable {
+    color: #7641bb
+}

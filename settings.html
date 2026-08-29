@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>设置</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    margin: 0;
+    padding: 20px 24px;
+    background: #f5f6f7;
+    color: #24292f;
+    user-select: none;
+  }
+  h2 { margin: 0 0 16px; font-size: 17px; font-weight: 600; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; color: #57606a; margin-bottom: 6px; }
+  .field select, .field input[type="number"], .field input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 7px 10px;
+    font-size: 14px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    background: #fff;
+    outline: none;
+  }
+  .field select:focus, .field input:focus { border-color: #0969da; box-shadow: 0 0 0 3px rgba(9,105,218,.15); }
+  .hint { margin: 6px 0 0; font-size: 12px; color: #8b949e; line-height: 1.5; }
+  .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+  button {
+    padding: 7px 22px;
+    font-size: 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid #d0d7de;
+    background: #fff;
+    color: #24292f;
+  }
+  button:hover { background: #f3f4f6; }
+  #okBtn { background: #0969da; border-color: #0969da; color: #fff; }
+  #okBtn:hover { background: #0a5ec0; }
+  #msg { min-height: 20px; margin-top: 12px; font-size: 13px; }
+  #msg.error { color: #cf222e; }
+  #msg.success { color: #1a7f37; }
+  .cfg-path {
+    padding: 7px 10px;
+    font-size: 13px;
+    color: #57606a;
+    background: #eef1f4;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    word-break: break-all;
+    user-select: text;
+  }
+</style>
+</head>
+<body>
+  <h2>服务器设置</h2>
+
+  <div class="field">
+    <label for="lang">界面语言</label>
+    <select id="lang" data-no-i18n>
+      <option value="zh">中文</option>
+      <option value="en">English</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="addr">监听地址</label>
+    <select id="addr"></select>
+  </div>
+
+  <div class="field">
+    <label for="port">监听端口</label>
+    <input type="number" id="port" min="0" max="65535" step="1">
+    <p class="hint">0 表示随机空闲端口（默认）；范围 3000 - 65535</p>
+  </div>
+
+  <div class="field">
+    <label>配置文件位置</label>
+    <div id="cfgPath" class="cfg-path"></div>
+  </div>
+
+  <div id="msg"></div>
+
+  <div class="actions">
+    <button id="cancelBtn">取消</button>
+    <button id="okBtn">确定</button>
+  </div>
+
+  <script src="public/js/i18n.js"></script>
+  <script>
+    const api = window.electronAPI;
+
+    function showMsg(text, type) {
+      const el = document.getElementById('msg');
+      el.textContent = text;
+      el.className = type || '';
+    }
+
+    function validatePort(port) {
+      if (port === '') return t('请输入监听端口');
+      const n = Number(port);
+      if (!Number.isInteger(n)) return t('监听端口必须是整数');
+      if (n === 0) return null; // 0 = 随机空闲端口
+      const min = 3000, max = 65535;
+      if (n < min || n > max) return t('监听端口范围：0（随机空闲端口）或 {0} - {1}', min, max);
+      return null;
+    }
+
+    async function init() {
+      const s = await api.getSettings();
+      // 语言下拉：回显当前配置值（手动改配置文件后也按配置回显）
+      document.getElementById('lang').value = s.language;
+      const addrSel = document.getElementById('addr');
+      // 下拉列表：允许的三种地址
+      s.allowedAddresses.forEach((addr) => {
+        const opt = document.createElement('option');
+        opt.value = addr;
+        opt.textContent = addr;
+        addrSel.appendChild(opt);
+      });
+      // 手动改配置文件后可能包含下拉之外的地址：仍回显，提示用户下拉中重新选择
+      if (!s.allowedAddresses.includes(s.listenAddress)) {
+        const opt = document.createElement('option');
+        opt.value = s.listenAddress;
+        opt.textContent = s.listenAddress + t('（配置文件中的值）');
+        addrSel.appendChild(opt);
+      }
+      addrSel.value = s.listenAddress;
+      document.getElementById('port').value = s.listenPort;
+      document.getElementById('cfgPath').textContent = s.configPath;
+    }
+
+    document.getElementById('okBtn').addEventListener('click', async () => {
+      const address = document.getElementById('addr').value;
+      const port = document.getElementById('port').value;
+      const language = document.getElementById('lang').value;
+
+      const portError = validatePort(port);
+      if (portError) {
+        showMsg(portError, 'error');
+        return;
+      }
+
+      const result = await api.saveSettings({ listenAddress: address, listenPort: Number(port), language });
+      if (result && result.success) {
+        showMsg(t('设置已保存，重启程序后生效。'), 'success');
+        // 语言切换即时生效：按新语言重载设置窗口界面
+        if (language && language !== I18N.lang) {
+          location.search = '?lang=' + language;
+        }
+      } else {
+        showMsg((result && result.error) || t('保存失败'), 'error');
+      }
+    });
+
+    document.getElementById('cancelBtn').addEventListener('click', () => {
+      window.close();
+    });
+
+    init();
+  </script>
+</body>
+</html>
