@@ -1426,14 +1426,18 @@ function selectBrowseRow(row, item) {
 }
 
 function pathJoin(dir, name) {
-  return dir.replace(/[\\/]+$/, '') + '\\' + name;
+  // The separator follows the directory itself (the server normalizes it with path.normalize per platform):
+  // Windows paths use backslash, POSIX (Linux/macOS) paths use forward slash — never hardcode a backslash
+  const sep = dir.indexOf('\\') >= 0 ? '\\' : '/';
+  return dir.replace(/[\\/]+$/, '') + sep + name;
 }
 
 function confirmBrowse() {
   const value = document.getElementById('browseFileNameInput').value.trim();
   if (!value || !browseCurrentDir) return;
   let fullPath;
-  if (/^[a-zA-Z]:[\\/]/.test(value) || value.startsWith('\\\\')) {
+  if (/^[a-zA-Z]:[\\/]/.test(value) || value.startsWith('\\\\') || value.startsWith('/')) {
+    // Absolute paths (Windows drive/UNC, or POSIX root like /www/...) are used as-is
     fullPath = value;
   } else {
     fullPath = pathJoin(browseCurrentDir, value);
@@ -2829,6 +2833,19 @@ function handleTabDrop(e) {
   renderTabView();
 }
 
+// 用隐藏的 <a target="_blank"> 点击方式打开 Web 链接文档（不在服务端调用系统程序）:
+// 浏览器会新开标签页；Electron 下主进程的 setWindowOpenHandler 会把它转到系统默认浏览器
+function openWeblink(url) {
+  if (!/^https?:\/\//i.test(String(url || ''))) return;
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 // Open a document and preview it
 // opts.record === false means do not add to history (e.g. opened from history/back button)
 async function openDocument(doc, opts) {
@@ -2849,8 +2866,15 @@ async function openDocument(doc, opts) {
     return;
   }
 
-  // Types that cannot be previewed in-app: open directly with the system default program (office docs / video / audio / web links)
-  const externalTypes = ['docx', 'xlsx', 'pptx', 'video', 'audio', 'weblink'];
+  // Web 链接类型: 直接在前端用隐藏 <a target="_blank"> 点击打开，不经过服务端调用系统程序
+  // (Electron 下由主进程 setWindowOpenHandler 转到系统默认浏览器; 纯浏览器模式下新开标签页)
+  if (doc.type === 'weblink') {
+    openWeblink(doc.path);
+    return;
+  }
+
+  // Types that cannot be previewed in-app: open directly with the system default program (office docs / video / audio)
+  const externalTypes = ['docx', 'xlsx', 'pptx', 'video', 'audio'];
   if (externalTypes.includes(doc.type)) {
     try {
       const response = await fetch(`${API_BASE}/open-external`, {
@@ -3896,11 +3920,13 @@ function handleExternalLinkClick(e) {
     return;
   }
   
+  // http/https 链接是互联网资源，直接在前端用 <a target="_blank"> 方式打开（不经过服务端调用系统程序）:
+  // 纯浏览器模式新开标签页，Electron 下由主进程 setWindowOpenHandler 转到系统默认浏览器
   const urlPattern = /^https?:\/\//i;
   if (urlPattern.test(href)) {
     e.preventDefault();
     e.stopPropagation();
-    openExternalLink(href);
+    openWeblink(href);
   }
 }
 
@@ -4191,17 +4217,8 @@ ${html}
       if (window.parent.showFindBar) window.parent.showFindBar();
     }
   });
-  // External links are handed to the main window to open
-  document.addEventListener('click', function(e) {
-    var link = e.target.closest('a');
-    if (link) {
-      var href = link.getAttribute('href');
-      if (href && (href.indexOf('http://') === 0 || href.indexOf('https://') === 0)) {
-        e.preventDefault();
-        window.parent.openExternalLink(href);
-      }
-    }
-  });
+  // http/https 链接在渲染时已加上 target="_blank"（见 markdown 链接后处理），直接由浏览器/Electron 默认行为打开：
+  // 纯浏览器模式新开标签页，Electron 下主进程 setWindowOpenHandler 转到系统默认浏览器，无需再拦截走服务端
   // mermaid rendering
   try {
     mermaid.initialize({ startOnLoad: false, theme: 'default', flowchart: { useMaxWidth: false } });
@@ -5343,7 +5360,7 @@ function switchRenderMode(mode) {
   }
 }
 
-// Render html content to the preview iframe (with external link interception and Ctrl+F find support)
+// Render html content to the preview iframe (external http/https links open via <a target="_blank">, plus Ctrl+F find support)
 function renderHtmlContent(content) {
   const contentDiv = getActiveContentEl();
   const htmlWithInterceptor = `
@@ -5351,15 +5368,16 @@ function renderHtmlContent(content) {
     <html>
     <head>
       <script>
-        document.addEventListener('click', function(e) {
-          var link = e.target.closest('a');
-          if (link) {
-            var href = link.getAttribute('href');
-            if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
-              e.preventDefault();
-              window.parent.openExternalLink(href);
+  // http/https 链接是互联网资源：给它们加上 target="_blank"，让浏览器/Electron 默认行为直接打开
+  // （纯浏览器模式新开标签页；Electron 下主进程 setWindowOpenHandler 转到系统默认浏览器），不再走服务端
+        document.addEventListener('DOMContentLoaded', function() {
+          document.querySelectorAll('a[href]').forEach(function(a) {
+            var href = a.getAttribute('href') || '';
+            if (href.indexOf('http://') === 0 || href.indexOf('https://') === 0) {
+              a.target = '_blank';
+              a.rel = 'noopener noreferrer';
             }
-          }
+          });
         });
   // Ctrl+F opens the main window find bar (key presses inside the iframe don't bubble to the main window)
         document.addEventListener('keydown', function(e) {

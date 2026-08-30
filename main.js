@@ -138,6 +138,16 @@ function createWindow(port) {
 
   mainWindow.loadURL(pageUrl(currentHost, port) + '?lang=' + currentLang);
 
+  // <a target="_blank"> / window.open 打开的 http(s) 链接: 转到系统默认浏览器打开，
+  // 而不是新建一个 Electron 窗口（weblink 文档即用这种方式在前端打开）
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) {
+      shell.openExternal(url).catch(() => {});
+      return { action: 'deny' };
+    }
+    return { action: 'allow' };
+  });
+
   mainWindow.on('closed', function () {
     mainWindow = null;
   });
