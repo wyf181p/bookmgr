@@ -3508,6 +3508,10 @@ body.resizing {
   border: 2px solid transparent;
 }
 
+::-webkit-scrollbar-corner {
+  background: var(--scrollbar-bg);
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .sidebar {

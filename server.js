@@ -977,6 +977,33 @@ function spawnSystemOpen(target, callback) {
   child.on('close', () => finish(null));
 }
 
+// Open a URL with the default browser.
+// Windows must NOT use explorer.exe: it mis-parses URLs containing '?' / '&' and
+// opens the file manager instead. `cmd /C start "" "url"` handles them correctly
+// (the empty "" title argument prevents start from treating the URL as a window title).
+// macOS: open; Linux and others: xdg-open
+function spawnOpenUrl(url, callback) {
+  let cmd;
+  let args;
+  if (process.platform === 'win32') {
+    cmd = 'cmd';
+    // windowsVerbatimArguments: args are joined verbatim, so the empty window
+    // title must be literal "" and the URL must be wrapped in double quotes
+    // (otherwise '?'/'&' are mis-parsed by cmd).
+    args = ['/C', 'start', '""', `"${url}"`];
+  } else if (process.platform === 'darwin') {
+    cmd = 'open';
+    args = [url];
+  } else {
+    cmd = 'xdg-open';
+    args = [url];
+  }
+
+  const child = spawn(cmd, args, { windowsHide: true, stdio: 'ignore', windowsVerbatimArguments: true });
+  child.on('error', (err) => callback(err));
+  child.on('close', () => callback(null));
+}
+
 app.post('/api/open-external', (req, res) => {
   // Remote clients are forbidden from invoking system software to open documents
   if (!isLocalClient(req)) {
@@ -991,8 +1018,9 @@ app.post('/api/open-external', (req, res) => {
 
   const urlPattern = /^https?:\/\//i;
 
+  const isUrl = urlPattern.test(filePath);
   let target;
-  if (urlPattern.test(filePath)) {
+  if (isUrl) {
     target = filePath;
   } else {
     target = path.normalize(filePath);
@@ -1002,7 +1030,9 @@ app.post('/api/open-external', (req, res) => {
     }
   }
 
-  spawnSystemOpen(target, (error) => {
+  // URLs go through the browser path (cmd start); files/folders keep explorer.exe
+  const opener = isUrl ? spawnOpenUrl : spawnSystemOpen;
+  opener(target, (error) => {
     if (error) {
       console.error(`执行命令失败: ${error.message}`);
       return res.status(500).json({ error: `打开失败: ${error.message}` });

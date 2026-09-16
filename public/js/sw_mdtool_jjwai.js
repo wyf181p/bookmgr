@@ -1389,7 +1389,7 @@
             hljs.registerLanguage('cmdlines', cmdlines);
             hljs.registerLanguage('http', http);
             hljs.configure({
-                languages: ['html','javascript','latex', ],
+                languages: ['plaintext','bash','c','cpp','csharp','css','diff','go','graphql','http','ini','java','javascript','json','kotlin','latex','less','lua','makefile','markdown','objectivec','perl','php','python','r','ruby','rust','scss','shell','sql','swift','typescript','vbnet','wasm','xml','yaml','html','cmdlines'],
             });
         }
 

@@ -3382,6 +3382,53 @@ function openCurrentFolder() {
   fetchBrowseList(dir);
 }
 
+// Refresh the current active tab page's content from the server (re-fetch document body / folder list).
+// Stays on the current active tab and the current view, without affecting other tabs/history.
+async function refreshActiveTab() {
+  if (!currentDocument || !currentDocument.path) return; // 主页/无文档：按钮所在导航区本就隐藏，作防御性判断
+  const doc = currentDocument;
+  const contentDiv = getActiveContentEl();
+  if (!contentDiv) return;
+
+  // 提示加载中（保留原滚动位置体验）
+  const prevScrollTop = contentDiv.scrollTop;
+  contentDiv.innerHTML = '<div style="text-align:center; padding: 2rem;">加载中...</div>';
+
+  try {
+    if (doc.type === 'folder') {
+      // 文件夹视图：重新调 /browse/list 拉取最新目录
+      const response = await fetch(`${API_BASE}/browse/list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: folderSessionId, dir: doc.path })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '读取目录失败');
+      renderFolderListData(data);
+    } else {
+      // 普通文档（包括 markdown / html / 文本 / 代码 / pdf 等）：重新从服务端拉取内容
+      // 不加 force=1，与初次打开保持一致：超大文件会再次出现 100MB 提示，由用户决定
+      const response = await fetch(`${API_BASE}/document/content?filePath=${encodeURIComponent(doc.path)}`);
+      const data = await response.json();
+      if (data.error) {
+        contentDiv.innerHTML = `<div style="color:red; padding: 2rem;">${escapeHtml(data.error)}</div>`;
+        return;
+      }
+      // 超大文件：仍由原来的 100MB gate 处理（与初次打开行为一致）
+      if (data.oversized) {
+        renderOversizedGate(data, doc);
+        return;
+      }
+      currentServerPath = data.serverRelPath || '';
+      // 保留原滚动位置（仅在内容区自身滚动的视图有意义；PDF/iframe 内部滚动由各自渲染自行管理）
+      renderDocumentContent(data, doc.type);
+      contentDiv.scrollTop = prevScrollTop;
+    }
+  } catch (error) {
+    contentDiv.innerHTML = '<div style="color:red; padding: 2rem;">' + t('刷新失败: {0}', error.message) + '</div>';
+  }
+}
+
 // ===== Document history =====
 const MD_HISTORY_KEY = 'md_doc_history';
 const MD_HISTORY_MAX = 20;
@@ -3968,6 +4015,9 @@ const MD_FRAME_STYLES = `
   .toc-list .toc-ind1 { padding-left: 1.0rem; font-size: 0.75rem; }
   .toc-list .toc-ind2 { padding-left: 1.8rem; font-size: 0.75rem; }
   .page h1, .page h2, .page h3, .page h4, .page h5, .page h6 { scroll-margin-top: 80px; }
+  /* 锚点跳转时的顶部留白：正文标题不一定包在 .page 里（front-matter 文档头、纯 HTML 内容等），再兜一层 */
+  #frameContent h1, #frameContent h2, #frameContent h3,
+  #frameContent h4, #frameContent h5, #frameContent h6 { scroll-margin-top: 80px; }
   .page table { width: fit-content; }
   .page pre { position: relative; overflow-x: auto; }
   .page pre code { background: none; padding: 0; color: inherit; }
@@ -3995,17 +4045,18 @@ const MD_FRAME_STYLES = `
   .page article tags::before { content: "\\e60e"; padding-left: 10px; padding-right: 5px; }
   .code-actions { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity 0.2s ease; z-index: 10; }
   .page pre:hover .code-actions { opacity: 1; }
-  .code-action-btn { width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; color: #6a737d; background-color: transparent; border: 1px solid #e1e4e8; border-radius: 4px; cursor: pointer; transition: all 0.2s ease; }
-  .code-action-btn:hover { background-color: #f1f3f5; color: #24292e; border-color: #586069; }
+  .code-action-btn { width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; color: var(--text-secondary, #6a737d); background-color: transparent; border: 1px solid var(--border-color, #e1e4e8); border-radius: 4px; cursor: pointer; transition: all 0.2s ease; }
+  .code-action-btn:hover { background-color: var(--bg-tertiary, #f1f3f5); color: var(--text-primary, #24292e); border-color: var(--text-secondary, #586069); }
   .code-action-btn svg { width: 14px; height: 14px; }
   .code-action-btn.copied, .code-action-btn.active { color: #31a476; border-color: #31a476; }
   /* Find match highlight (works for light/dark theme) */
   mark.find-hl { background-color: var(--find-hl-bg, #fff3a3); color: inherit; padding: 0 1px; border-radius: 2px; }
   mark.find-hl.find-current { background-color: var(--find-current-bg, #ff9632); color: #fff; }
   [data-theme="dark"] { --find-hl-bg: #6b5b1e; --find-current-bg: #c96a1c; }
-  ::-webkit-scrollbar { background: var(--scrollbar-bg, #fcfcfc); width: 10px; }
-  ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb-bg, #888); border-radius: 6px; min-height: 40px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-bg-hover, #636363); }
+  ::-webkit-scrollbar { background: var(--scrollbar-bg, #e8eaed); width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb-bg, #c5ccd4); border-radius: 6px; border: 2px solid transparent; background-clip: content-box; min-height: 40px; min-width: 40px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-bg-hover, #aab3bd); border: 2px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-corner { background: var(--scrollbar-bg, #e8eaed); }
   /* Document header (front-matter parsing: title/description/keywords/tags etc.) */
   .md-doc-header {
     padding: 1rem 1.2rem 1rem;
@@ -4271,6 +4322,114 @@ ${html}
     actionsDiv.appendChild(lineNumBtn);
     pre.appendChild(actionsDiv);
   });
+  // ===== 文档内锚点链接 (<a href="#xxx">) =====
+  // 标题 id 分配 + 锚点解析集中在这里，目录与正文锚点共用同一套规则：
+  //   1) id 生成（类 GitHub，Unicode 感知）：保留字母/数字/中文，空格与下划线转 "-"，
+  //      去掉 反引号、星号、下划线、波浪号 与各种标点（. : & ：等），折叠重复的 "-" 并去掉首尾 "-"；
+  //   2) 同名标题按出现顺序追加 -1、-2…（与 GitHub 重复标题的锚点行为一致）；
+  //   3) marked 会对 href 做 encodeURI（中文会变成 %E4%B8%AD…），解析时先 decodeURIComponent；
+  //   4) 目标解析顺序：精确 id → 解码后 id → 标题 slug → 归一化文本 → 宽松包含匹配，
+  //      所以 [x](#1.2-配置说明)、[x](#中文标题)、[x](#Install--Config) 这类手写锚点都能命中；
+  //   5) 都找不到时不拦截、不跳转，保持链接原本语义（原来会 preventDefault 后什么都不做）。
+  // 注意：本段代码整体位于上面的模板字符串内部，正则里的反斜杠要写成"双反斜杠"才会原样进入 iframe；
+  //      只写单个反斜杠时会被外层模板字符串直接吃掉：空白字符类会退化成"匹配字母 s"的正则，
+  //      Unicode 字符类会退化成普通字母。历史上正是这个原因导致含空格/含字母 s 的标题锚点命中失败。
+  var mdAnchor = (function setupMdAnchors() {
+    var contentEl = document.getElementById('frameContent');
+    if (!contentEl) return null;
+
+    var ZERO_WIDTH = /[\\u200b-\\u200d\\ufeff]/g;
+    function slug(text) {
+      return String(text == null ? '' : text)
+        .replace(ZERO_WIDTH, '')
+        .replace(/[\`*_~]/g, '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^\\p{L}\\p{N} _-]/gu, '')
+        .replace(/[\\s_]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    }
+    // 文本归一化：小写 + 去掉空白与标点；withSymbols=true 时同时去掉 & + = 等符号。
+    // 用于把手写锚点字符串与标题正文做宽松比对（"1.2 配置说明" ≡ "1.2-配置说明"）
+    function normText(text, withSymbols) {
+      var re = withSymbols ? /[\\s\\p{P}\\p{S}]+/gu : /[\\s\\p{P}]+/gu;
+      return String(text == null ? '' : text).toLowerCase().replace(re, '');
+    }
+    function safeDecode(s) {
+      try { return decodeURIComponent(s); } catch (e) { return s; }
+    }
+
+    // ---- 给所有 h1~h6 分配稳定 id（旧实现只给目录用到的那几级标题分配 heading-N，锚点无法命中）----
+    var headingList = [];
+    var bySlug = {};
+    var byNorm = {};
+    (function assignHeadingIds() {
+      var seen = {};
+      var n = 0;
+      contentEl.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(function(h) {
+        var base = slug(h.textContent) || ('heading-' + n);
+        var key = base, k = 0;
+        while (seen[key]) { k++; key = base + '-' + k; }
+        seen[key] = true;
+        h.id = key;
+        headingList.push(h);
+        if (!bySlug[base]) bySlug[base] = h;
+        var nt = normText(h.textContent, false);
+        if (nt && !byNorm[nt]) byNorm[nt] = h;
+        n++;
+      });
+    })();
+
+    function byId(id) {
+      if (!id) return null;
+      var el = null;
+      try { if (window.CSS && CSS.escape) el = contentEl.querySelector('#' + CSS.escape(id)); } catch (e) { el = null; }
+      if (!el) el = document.getElementById(id);
+      return (el && contentEl.contains(el)) ? el : null;
+    }
+
+    // "#xxx" 里的锚点字符串 -> 目标元素（找不到返回 null）
+    function resolve(raw) {
+      if (!raw) return null;
+      var cands = [raw];
+      var decoded = safeDecode(raw);
+      if (decoded !== raw) cands.push(decoded);
+      var i, el, j;
+      for (i = 0; i < cands.length; i++) { el = byId(cands[i]); if (el) return el; }         // 1) 精确 id（不限于标题）
+      for (i = 0; i < cands.length; i++) { var s = slug(cands[i]); if (s && bySlug[s]) return bySlug[s]; } // 2) 标题 slug
+      for (i = 0; i < cands.length; i++) { var nt = normText(cands[i], false); if (nt && byNorm[nt]) return byNorm[nt]; } // 3) 归一化文本
+      for (i = 0; i < cands.length; i++) {                                                   // 4) 宽松匹配（忽略符号 + 包含）
+        var needle = normText(cands[i], true);
+        if (!needle) continue;
+        for (j = 0; j < headingList.length; j++) {
+          var ht = normText(headingList[j].textContent, true);
+          if (ht && (ht === needle || ht.indexOf(needle) >= 0 || needle.indexOf(ht) >= 0)) return headingList[j];
+        }
+      }
+      return null;
+    }
+
+    function jumpTo(el) {
+      if (!el) return false;
+      try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      catch (e) { el.scrollIntoView(); }
+      return true;
+    }
+
+    // 事件代理：正文里静态/动态插入的锚点都能生效（旧实现只在加载时对当时存在的 a 绑定一次）
+    document.addEventListener('click', function(ev) {
+      var a = ev.target && ev.target.closest ? ev.target.closest('a[href^="#"]') : null;
+      if (!a || !contentEl.contains(a)) return;
+      var target = resolve(String(a.getAttribute('href') || '').slice(1));
+      if (!target) return;
+      ev.preventDefault();
+      jumpTo(target);
+    });
+
+    return { resolve: resolve, jumpTo: jumpTo, slug: slug };
+  })();
+
   // generate the table of contents
   (function generateFrameToc() {
     var contentEl = document.getElementById('frameContent');
@@ -4284,9 +4443,11 @@ ${html}
     }
     var headings = contentEl.querySelectorAll(headsearchkeys.join(','));
     var tocHTML = '';
-    headings.forEach(function(heading, index) {
-      var id = 'heading-' + index;
-      heading.id = id;
+    headings.forEach(function(heading) {
+      // 标题 id 由上面的 mdAnchor 模块统一分配（slug 规则，支持中文），目录直接复用，
+      // 避免目录再生成一套 heading-N 把锚点真正指向的 id 覆盖掉
+      var id = heading.id;
+      if (!id) return;
       var level = heading.tagName.toLowerCase();
       var indentClass = level === headsearchkeys[1] ? 'toc-ind1' : (level === headsearchkeys[2] ? 'toc-ind2' : '');
       tocHTML += '<li><a href="#' + id + '" class="' + indentClass + '">' + heading.textContent + '</a></li>';
@@ -4303,8 +4464,8 @@ ${html}
       a.addEventListener('click', function(e) {
         e.preventDefault();
         setActive(a);
-        var target = document.getElementById(a.getAttribute('href').slice(1));
-        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        var target = mdAnchor ? mdAnchor.resolve(a.getAttribute('href').slice(1)) : null;
+        if (target) mdAnchor.jumpTo(target);
       });
     });
 
@@ -4333,6 +4494,8 @@ ${html}
     document.addEventListener('scroll', updateActive, { passive: true });
     updateActive();
   })();
+  // 文档内锚点链接 (<a href="#xxx">) 的解析与滚动已由上面的 mdAnchor 模块统一处理：
+  // 事件代理 + "精确 id / 解码 / slug / 归一化文本 / 包含" 多级匹配，此处不再逐个绑定。
 <\/script>
 </body>
 </html>`;

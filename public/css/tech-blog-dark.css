@@ -28,6 +28,11 @@
   --border-color: #30363d;
   --border-light: #21262d;
   
+  /* Scrollbar - track slightly lighter than the page bg (visible but not bright), slim rounded thumb */
+  --scrollbar-bg: #161b22;
+  --scrollbar-thumb-bg: #3d4853;
+  --scrollbar-thumb-bg-hover: #505c69;
+  
   /* Table color */
   --table-header-bg: #161b22;
   --table-stripe-bg: #0d1117;
